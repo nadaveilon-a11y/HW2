@@ -160,8 +160,9 @@ public class BigramModel {
             int prevIdx = findIndex(vocabulary, normalizeWord(splitted_line[0]));
             for (int i = 1; i < splitted_line.length; i++){
                 int currIdx = findIndex(vocabulary, normalizeWord(splitted_line[i]));
-                if (currIdx == ELEMENT_NOT_FOUND || prevIdx == ELEMENT_NOT_FOUND) continue;
-                map[prevIdx][currIdx]++;
+                if (currIdx != ELEMENT_NOT_FOUND && prevIdx != ELEMENT_NOT_FOUND){
+                    map[prevIdx][currIdx]++;
+                }
                 prevIdx = currIdx;
             }
         }
