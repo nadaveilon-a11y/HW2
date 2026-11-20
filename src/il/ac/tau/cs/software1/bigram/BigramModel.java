@@ -3,6 +3,13 @@ package il.ac.tau.cs.software1.bigram;
 import java.io.IOException;
 import java.util.Locale;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+
 public class BigramModel {
     public static final int MAX_VOCABULARY_SIZE = 14500;
     public static final String VOC_FILE_SUFFIX = ".voc";
@@ -69,18 +76,76 @@ public class BigramModel {
         }
         return ELEMENT_NOT_FOUND;
     }
+    
 
     ///////////////////////////////////////////////////////////////////////////
     // Questions 1 - 5: implement these
     ///////////////////////////////////////////////////////////////////////////
+
+
+    private static String[] extractContent(String file_name, boolean byLines) throws IOException {
+        
+        StringBuilder sb = new StringBuilder();
+
+        try (BufferedReader br = new BufferedReader(new FileReader(file_name))){
+            String line;
+            while ((line = br.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+        }
+
+        if (byLines) {
+            if (sb.length() == 0) {
+                return new String[0];
+            }
+            return sb.toString().split("\n");
+        }
+
+        String content = sb.toString().trim();
+        if (content.isEmpty()) {
+            return new String[0];
+        } 
+        return content.split("\\s+");
+    }
+
+    private static void saveToFile(String fileName, String[] lines) throws IOException {
+        
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(fileName))){
+            for (String l: lines){
+                bw.write(l);
+                bw.write(System.lineSeparator());
+            }
+        }
+    }
+
+    private static boolean contains(String[] words, String target, int size){
+        if (target == null) return true;
+        for (int i = 0; i < size; i++){
+            if (target.equals(words[i])) return true;
+        }
+        return false;
+    }
 
     /*
      * @post: mVocabulary = prev(mVocabulary)
      * @post: mBigramCounts = prev(mBigramCounts)
      */
     public String[] buildVocabularyIndex(String fileName) throws IOException { // Question 1
-        // TODO: implement
-        return null;
+        String[] words = extractContent(fileName, false);
+        String[] unique_words = new String[Math.min(words.length, MAX_VOCABULARY_SIZE)];
+        int unique_count = 0;
+        for (String w: words){
+            String parsed = normalizeWord(w);
+            if (parsed == null) continue;
+            if (!contains(unique_words, parsed, unique_count)){
+                unique_words[unique_count] = parsed;
+                unique_count++;
+            }
+            if (unique_count == MAX_VOCABULARY_SIZE) break;
+        }
+        String[] result = new String[unique_count];
+        for (int i = 0; i < unique_count; i++) result[i] = unique_words[i];
+        return result;
     }
 
     /*
@@ -88,8 +153,19 @@ public class BigramModel {
      * @post: mBigramCounts = prev(mBigramCounts)
      */
     public int[][] buildCountsArray(String fileName, String[] vocabulary) throws IOException { // Question 2
-        // TODO: implement
-        return null;
+        String[] lines = extractContent(fileName, true);
+        int[][] map = new int[vocabulary.length][vocabulary.length];
+        for (String line: lines){
+            String [] splitted_line = line.trim().split("\\s+");
+            int prevIdx = findIndex(vocabulary, normalizeWord(splitted_line[0]));
+            for (int i = 1; i < splitted_line.length; i++){
+                int currIdx = findIndex(vocabulary, normalizeWord(splitted_line[i]));
+                if (currIdx == ELEMENT_NOT_FOUND || prevIdx == ELEMENT_NOT_FOUND) continue;
+                map[prevIdx][currIdx]++;
+                prevIdx = currIdx;
+            }
+        }
+        return map;
     }
 
     /*
@@ -97,14 +173,56 @@ public class BigramModel {
      * @pre: fileName is a legal file path
      */
     public void saveModel(String fileName) throws IOException { // Question 3
-        // TODO: implement
+        String[] lines_voc = new String[mVocabulary.length + 1];
+        lines_voc[0] = Integer.toString(mVocabulary.length) + " words";
+        for (int i = 0; i < mVocabulary.length; i++){
+            lines_voc[i+1] = i + "," + mVocabulary[i];
+        }
+        saveToFile(fileName + VOC_FILE_SUFFIX, lines_voc);
+
+        int count = 0;
+        for (int i = 0; i < mVocabulary.length; i++) {
+            for (int j = 0; j < mVocabulary.length; j++) {
+                if (mBigramCounts[i][j] > 0) {
+                    count++;
+                }
+            }
+        }
+
+        String[] lines_counts = new String[count];
+        int ind = 0;
+        for (int i = 0; i < mVocabulary.length; i++){
+            for (int j = 0; j < mVocabulary.length; j++){
+                if (mBigramCounts[i][j] == 0) continue;
+                lines_counts[ind] = i + "," + j + ":" + mBigramCounts[i][j];
+                ind++;
+            }
+        }
+        saveToFile(fileName + COUNTS_FILE_SUFFIX, lines_counts);
     }
 
     /*
      * @pre: fileName is a legal file path
      */
     public void loadModel(String fileName) throws IOException { // Question 4
-        // TODO: implement
+        String[] lines = extractContent(fileName + VOC_FILE_SUFFIX, true);
+        String[] vocab = new String[lines.length-1];
+        for (int i = 1; i < lines.length; i++){
+            String[] sp = lines[i].split(",", 2);
+            vocab[Integer.parseInt(sp[0])] = sp[1];
+        }
+        mVocabulary = vocab;
+
+        String[] c_lines = extractContent(fileName + COUNTS_FILE_SUFFIX, true);
+        int[][] counts = new int[mVocabulary.length][mVocabulary.length];
+        for(String l: c_lines){
+            String[] sp = l.split(":");
+            String[] indices = sp[0].split(",");
+            int i = Integer.parseInt(indices[0]);
+            int j = Integer.parseInt(indices[1]);
+            counts[i][j] = Integer.parseInt(sp[1]);
+        }
+        mBigramCounts = counts;
     }
 
     /*
@@ -114,8 +232,15 @@ public class BigramModel {
      * @post: if sentence is probable, according to the model, $ret = true, else, $ret = false
      */
     public boolean isLegalSentence(String sentence) { // Question 5
-        // TODO: implement
-        return false;
+        if (sentence.isEmpty()) return true;
+        String[] all_words = sentence.split("\\s+");
+        if (all_words.length == 1) return findIndex(mVocabulary, all_words[0])!=ELEMENT_NOT_FOUND;
+        for (int k = 0; k < all_words.length - 1; k++){
+            int i = findIndex(mVocabulary, all_words[k]);
+            int j = findIndex(mVocabulary, all_words[k+1]);
+            if (i == ELEMENT_NOT_FOUND || j == ELEMENT_NOT_FOUND || mBigramCounts[i][j] == 0) return false;
+        }
+        return true;
     }
 
     ///////////////////////////////////////////////////////////////////////////
